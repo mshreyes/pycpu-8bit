@@ -22,3 +22,7 @@ You can also run and trace sample programs directly from your command line:
 
 ```bash
 python3 cpu_core.py
+```
+
+### Credits
+Coding assistance: Gemini Argon (Google)
