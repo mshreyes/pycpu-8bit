@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>8-Bit CPU Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+  <style>
+    :root {
+      --bg-page: #f4ecd8;
+      --bg-card: #fdf6e3;
+      --bg-subtle: #eee8d5;
+      --bg-dark: #2b251d;
+      --text-dark-bg: #ebdcb2;
+      --text-main: #3b3228;
+      --text-muted: #655a4c;
+      --border: #dfd6c1;
+      --accent: #b55400;
+      --accent-hover: #8f4200;
+      --accent-soft: rgba(181, 84, 0, 0.12);
+      --blue: #0369a1;
+      --blue-soft: rgba(3, 105, 161, 0.16);
+      --green: #15803d;
+      --green-soft: rgba(21, 128, 61, 0.16);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-page);
+      color: var(--text-main);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    code, pre, .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Header */
+    header {
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .nav-bar {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 0.85rem 1.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .site-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.88rem;
+      padding: 0.45rem 0.9rem;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: var(--bg-subtle);
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .engine-state {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    /* Page Views */
+    .view {
+      display: none;
+      max-width: 1320px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 1.5rem;
+      flex: 1;
+    }
+
+    .view.active {
+      display: block;
+    }
+
+    /* (i) Info Button */
+    .info-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--bg-subtle);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      font-weight: 700;
+      font-style: italic;
+      cursor: pointer;
+      margin-left: 0.35rem;
+      vertical-align: middle;
+      line-height: 1;
+    }
+
+    .info-btn:hover {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* Hover Tooltip */
+    #tooltip {
+      position: fixed;
+      z-index: 200;
+      max-width: 280px;
+      background: var(--bg-dark);
+      color: var(--text-dark-bg);
+      padding: 0.65rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      pointer-events: none;
+      display: none;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+    }
+
+    #tooltip strong {
+      display: block;
+      color: #f6ad55;
+      margin-bottom: 0.2rem;
+    }
+
+    #tooltip small {
+      display: block;
+      margin-top: 0.35rem;
+      color: #b5a68f;
+      font-size: 0.72rem;
+    }
+
+    /* Simulator Layout */
+    .status-bar {
+      background: var(--bg-dark);
+      color: var(--text-dark-bg);
+      padding: 1rem 1.25rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      font-size: 0.98rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .controls-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    button.btn, select.select {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 0.45rem 0.85rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-subtle);
+      color: var(--text-main);
+      cursor: pointer;
+    }
+
+    button.btn:hover:not(:disabled) {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    button.btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    button.btn.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    button.btn.primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      color: #fff;
+    }
+
+    .sim-columns {
+      display: grid;
+      grid-template-columns: 310px 1fr 370px;
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .card-header {
+      background: var(--bg-subtle);
+      padding: 0.65rem 1rem;
+      font-size: 0.88rem;
+      font-weight: 700;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-body {
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .code-input {
+      width: 100%;
+      min-height: 320px;
+      resize: vertical;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.84rem;
+      line-height: 1.55;
+      padding: 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-dark);
+      color: var(--text-dark-bg);
+    }
+
+    /* 3 Stages */
+    .stages {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+    }
+
+    .stage {
+      padding: 0.55rem;
+      text-align: center;
+      font-weight: 600;
+      font-size: 0.82rem;
+      border-radius: 6px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .stage.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    /* Registers */
+    .group-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+      display: flex;
+      align-items: center;
+    }
+
+    .reg-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.5rem;
+    }
+
+    .reg-item {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.55rem 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .reg-item.changed {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .reg-name {
+      font-size: 0.84rem;
+      font-weight: 600;
+    }
+
+    .reg-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    /* ALU & Flags */
+    .alu-flags {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0.75rem;
+    }
+
+    .box-subtle {
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .flag-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+    }
+
+    .flag-pill.on {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+
+    .output-box {
+      background: var(--bg-dark);
+      color: #6ee7b7;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: 6px;
+      min-height: 54px;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    /* Memory Grid */
+    .ram-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+    }
+
+    .ram-cell {
+      background: var(--bg-page);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.3rem 0.15rem;
+      text-align: center;
+    }
+
+    .ram-cell .addr {
+      display: block;
+      font-size: 0.62rem;
+      color: var(--text-muted);
+    }
+
+    .ram-cell.nonzero {
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .ram-cell.is-pc {
+      background: var(--blue-soft);
+      border-color: var(--blue);
+    }
+
+    .ram-cell.is-sp {
+      background: var(--green-soft);
+      border-color: var(--green);
+    }
+
+    /* Content Pages (Tour, Wiki, How It Works, Credits) */
+    .content-page {
+      max-width: 900px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .info-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      scroll-margin-top: 80px;
+    }
+
+    .info-card.highlight-target {
+      border: 2px solid var(--accent);
+    }
+
+    .info-card h2 {
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .info-card h3 {
+      font-size: 1.05rem;
+      color: var(--accent);
+      margin-bottom: 0.35rem;
+    }
+
+    .info-card p {
+      color: var(--text-main);
+      font-size: 0.94rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .info-card a {
+      color: var(--accent);
+      font-weight: 600;
+      text-decoration: none;
+      font-size: 0.86rem;
+    }
+
+    .info-card a:hover {
+      text-decoration: underline;
+    }
+
+    .tour-steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 1rem;
+    }
+
+    .wiki-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+      gap: 1rem;
+    }
+
+    table.simple-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin-top: 0.5rem;
+    }
+
+    table.simple-table th, table.simple-table td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+
+    table.simple-table th {
+      background: var(--bg-subtle);
+      font-weight: 700;
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      background: var(--bg-card);
+      padding: 1rem;
+      text-align: center;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: auto;
+    }
+
+    @media (max-width: 1120px) {
+      .sim-columns {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="tooltip"></div>
+
+  <header>
+    <div class="nav-bar">
+      <div class="site-title">8-Bit CPU Simulator</div>
+
+      <nav class="tabs">
+        <button class="tab-btn" data-tab="tour">Start Here</button>
+        <button class="tab-btn active" data-tab="sim">CPU Simulator</button>
+        <button class="tab-btn" data-tab="wiki">Wiki</button>
+        <button class="tab-btn" data-tab="how">How It's Made</button>
+        <button class="tab-btn" data-tab="resources">Resources</button>
+      </nav>
+
+      <div class="engine-state" id="engineStatus">Loading Python...</div>
+    </div>
+  </header>
+
+  <!-- =========================================================
+       VIEW 0: START HERE (INTERFACE TOUR)
+       ========================================================= -->
+  <section class="view" id="view-tour">
+    <div class="content-page">
+      <div class="info-card">
+        <h2>Welcome: What Is This Page?</h2>
+        <p>
+          A computer processor (CPU) looks complex, but it only does one simple job over and over: it reads a short command from memory, figures out what the command means, and does a basic math or data move. This simulator slows the CPU down so you can click a button and watch each step happen in plain sight.
+        </p>
+        <button class="btn primary" onclick="openTab('sim')" style="margin-top:0.5rem;">Go to the Simulator</button>
+      </div>
+
+      <div class="tour-steps">
+        <div class="info-card">
+          <h3>1. The Dark Banner at the Top</h3>
+          <p>
+            At the top of the simulator is a dark box. Every time you click a button, this box explains what the CPU just did in one plain English sentence. If you only look at one thing, look here.
+          </p>
+        </div>
+
+        <div class="info-card">
+          <h3>2. Left Panel: Program Instructions</h3>
+          <p>
+            This is the list of instructions you want the CPU to run (for example, <code>MOVI R0, 14</code> means "put the number 14 into slot R0"). You can pick a pre-made example from the dropdown menu or type your own, then click <strong>Load into Memory</strong>.
+          </p>
+        </div>
+
+        <div class="info-card">
+          <h3>3. Center Panel: Inside the CPU</h3>
+          <p>
+            Every instruction takes three small steps: <strong>Fetch</strong> (read the command from memory), <strong>Decode</strong> (understand the command), and <strong>Execute</strong> (do the math or move the number). You can watch the numbers inside the CPU's temporary slots (<code>R0</code> to <code>R3</code>) change as it works.
+          </p>
+        </div>
+
+        <div class="info-card">
+          <h3>4. Right Panel: Memory (RAM)</h3>
+          <p>
+            Memory is just a numbered grid of boxes (from box <code>0</code> to box <code>255</code>). When you load a program, your instructions are turned into numbers and placed into these boxes starting at box <code>0</code>. The blue box shows which instruction the CPU is reading right now.
+          </p>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <h3>How to Use the Control Buttons</h3>
+        <p><strong>Small Step (Fetch / Decode / Execute):</strong> Advances the CPU by just one-third of an instruction so you can see Fetch, Decode, and Execute separately.</p>
+        <p><strong>Full Instruction:</strong> Runs Fetch, Decode, and Execute all at once to finish one whole line of your program.</p>
+        <p><strong>The (i) Buttons:</strong> Hover over any <strong>i</strong> button to see a quick definition, or click it to open that term in the Wiki.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       VIEW 1: CPU SIMULATOR
+       ========================================================= -->
+  <main class="view active" id="view-sim">
+
+    <div class="status-bar">
+      <div id="statusText">Loading Python engine...</div>
+      <div class="mono" style="font-size:0.85rem;color:#f6ad55;" id="currentInstruction">Command: None</div>
+    </div>
+
+    <div class="controls-bar">
+      <div class="btn-row">
+        <select id="exampleSelect" class="select">
+          <option value="add">Example 1: Add Two Numbers (14 + 28)</option>
+          <option value="count">Example 2: Count Down from 5 to 0</option>
+          <option value="fib">Example 3: Fibonacci Sequence</option>
+          <option value="memory">Example 4: Save &amp; Read from Memory</option>
+        </select>
+        <button id="loadBtn" class="btn primary" disabled>Load into Memory</button>
+      </div>
+
+      <div class="btn-row">
+        <button id="microBtn" class="btn" disabled>Small Step (Fetch / Decode / Execute)</button>
+        <button id="stepBtn" class="btn primary" disabled>Full Instruction</button>
+        <button id="runBtn" class="btn" disabled>Auto-Run</button>
+        <button id="resetBtn" class="btn" disabled>Reset</button>
+      </div>
+    </div>
+
+    <div class="sim-columns">
+
+      <!-- Column 1: Program -->
+      <section class="card">
+        <div class="card-header">
+          <span>1. Program <button class="info-btn" data-wiki="wiki-assembly">i</button></span>
+        </div>
+        <div class="card-body">
+          <textarea id="codeEditor" class="code-input" spellcheck="false"></textarea>
+          <div id="errorText" class="mono" style="font-size:0.78rem;color:#b91c1c;display:none;"></div>
+        </div>
+      </section>
+
+      <!-- Column 2: CPU -->
+      <section class="card">
+        <div class="card-header">
+          <span>2. CPU <button class="info-btn" data-wiki="wiki-cpu">i</button></span>
+          <span class="mono" style="font-size:0.78rem;font-weight:500;" id="stepCounter">Instructions Run: 0</span>
+        </div>
+        <div class="card-body">
+
+          <div>
+            <div class="group-label">Current Step <button class="info-btn" data-wiki="wiki-cycle">i</button></div>
+            <div class="stages">
+              <div class="stage" id="stFetch">1. Fetch <button class="info-btn" data-wiki="wiki-fetch">i</button></div>
+              <div class="stage" id="stDecode">2. Decode <button class="info-btn" data-wiki="wiki-decode">i</button></div>
+              <div class="stage" id="stExecute">3. Execute <button class="info-btn" data-wiki="wiki-execute">i</button></div>
+            </div>
+          </div>
+
+          <div>
+            <div class="group-label">Number Slots (Registers R0 – R3) <button class="info-btn" data-wiki="wiki-registers">i</button></div>
+            <div class="reg-grid" id="gprContainer"></div>
+          </div>
+
+          <div>
+            <div class="group-label">Bookmarks &amp; Pointers</div>
+            <div class="reg-grid">
+              <div class="reg-item" id="boxPC">
+                <span class="reg-name">PC (Next Box) <button class="info-btn" data-wiki="wiki-pc">i</button></span>
+                <span class="reg-value" id="valPC">0</span>
+              </div>
+              <div class="reg-item" id="boxIR">
+                <span class="reg-name">IR (Command) <button class="info-btn" data-wiki="wiki-ir">i</button></span>
+                <span class="reg-value" id="valIR">0x0000</span>
+              </div>
+              <div class="reg-item" id="boxMAR">
+                <span class="reg-name">MAR (Memory Box) <button class="info-btn" data-wiki="wiki-mar">i</button></span>
+                <span class="reg-value" id="valMAR">0</span>
+              </div>
+              <div class="reg-item" id="boxSP">
+                <span class="reg-name">SP (Stack Top) <button class="info-btn" data-wiki="wiki-sp">i</button></span>
+                <span class="reg-value" id="valSP">255</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="alu-flags">
+            <div class="box-subtle">
+              <span style="font-size:0.82rem;font-weight:600;">Math Unit (ALU) <button class="info-btn" data-wiki="wiki-alu">i</button></span>
+              <span class="mono" style="font-size:0.85rem;font-weight:700;color:var(--accent);" id="valALU">Idle</span>
+            </div>
+            <div class="box-subtle">
+              <span style="font-size:0.82rem;font-weight:600;">Flags <button class="info-btn" data-wiki="wiki-flags">i</button></span>
+              <span class="flag-pill" id="flgZ" title="Zero Flag">Z:0</span>
+              <span class="flag-pill" id="flgC" title="Carry Flag">C:0</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="group-label">Screen Output (OUT) <button class="info-btn" data-wiki="wiki-out">i</button></div>
+            <div class="output-box" id="outputScreen">None yet</div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Column 3: Memory -->
+      <section class="card">
+        <div class="card-header">
+          <span>3. Memory (RAM) <button class="info-btn" data-wiki="wiki-ram">i</button></span>
+          <button id="toggleRamBtn" class="btn" style="padding:0.2rem 0.5rem;font-size:0.74rem;">Show All 256 Boxes</button>
+        </div>
+        <div class="card-body">
+          <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-muted);">
+            <span>Blue = Next Instruction (PC)</span>
+            <span>Orange = Non-Zero Value</span>
+          </div>
+          <div class="ram-grid" id="ramGrid"></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- =========================================================
+       VIEW 2: WIKI (SIMPLE DEFINITIONS + WIKIPEDIA LINKS)
+       ========================================================= -->
+  <section class="view" id="view-wiki">
+    <div class="content-page">
+      <div class="info-card">
+        <h2>Wiki</h2>
+        <p>Every part of the simulator is explained below in simple terms, with links to Wikipedia if you want to explore the deeper electronics.</p>
+      </div>
+
+      <div class="wiki-list">
+        <div class="info-card" id="wiki-cpu">
+          <h3>CPU (Central Processing Unit)</h3>
+          <p>The main chip in a computer that runs instructions. It does not think on its own; it simply follows a list of basic commands stored in memory one step at a time.</p>
+          <a href="https://en.wikipedia.org/wiki/Central_processing_unit" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-cycle">
+          <h3>Instruction Cycle (Fetch, Decode, Execute)</h3>
+          <p>The three-step loop that every CPU repeats forever: grab the next command from memory (Fetch), figure out what it means (Decode), and do the work (Execute).</p>
+          <a href="https://en.wikipedia.org/wiki/Instruction_cycle" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-fetch">
+          <h3>1. Fetch</h3>
+          <p>The CPU looks at the Program Counter (PC) to see which memory box holds the next command, copies those two boxes into the CPU, and moves the PC bookmark ahead by 2.</p>
+          <a href="https://en.wikipedia.org/wiki/Instruction_cycle#Fetch_stage" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-decode">
+          <h3>2. Decode</h3>
+          <p>Inside memory, commands are stored as plain numbers. During Decode, the CPU translates those numbers into a specific action (like Add or Move) and picks which registers to use.</p>
+          <a href="https://en.wikipedia.org/wiki/Instruction_cycle#Decode_stage" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-execute">
+          <h3>3. Execute</h3>
+          <p>The CPU performs the decoded command—such as adding two numbers in the Math Unit (ALU), saving a number into a register, or printing a number to the screen.</p>
+          <a href="https://en.wikipedia.org/wiki/Instruction_cycle#Execute_stage" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-registers">
+          <h3>Registers (R0, R1, R2, R3)</h3>
+          <p>Four small number slots built directly inside the CPU. Because they are inside the CPU, it can do math on them immediately. Each 8-bit slot can hold a whole number from 0 to 255.</p>
+          <a href="https://en.wikipedia.org/wiki/Processor_register" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-pc">
+          <h3>PC (Program Counter)</h3>
+          <p>A bookmark that remembers the memory box number of the next instruction to run. Normally it counts up by 2 after each command, unless a Jump command sends it to a different box.</p>
+          <a href="https://en.wikipedia.org/wiki/Program_counter" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-ir">
+          <h3>IR (Instruction Register)</h3>
+          <p>Holds the single command that the CPU is currently decoding and executing.</p>
+          <a href="https://en.wikipedia.org/wiki/Instruction_register" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-mar">
+          <h3>MAR (Memory Address Register)</h3>
+          <p>Holds the box number in Memory (RAM) that the CPU is currently reading from or writing to.</p>
+          <a href="https://en.wikipedia.org/wiki/Memory_address_register" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-sp">
+          <h3>SP (Stack Pointer)</h3>
+          <p>Points to a temporary scratchpad area at the very end of memory (starting at box 255) used when calling functions with <code>CALL</code> and returning with <code>RET</code>.</p>
+          <a href="https://en.wikipedia.org/wiki/Stack_register" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-alu">
+          <h3>ALU (Arithmetic Logic Unit)</h3>
+          <p>The calculator inside the CPU. It adds, subtracts, and compares numbers stored in the registers.</p>
+          <a href="https://en.wikipedia.org/wiki/Arithmetic_logic_unit" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-flags">
+          <h3>Flags (Z and C)</h3>
+          <p>Tiny indicator lights set by the calculator (ALU). <strong>Z (Zero)</strong> turns to 1 when a calculation equals 0. <strong>C (Carry)</strong> turns to 1 when an addition goes past 255. Jump commands check these lights to decide whether to loop.</p>
+          <a href="https://en.wikipedia.org/wiki/Status_register" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-ram">
+          <h3>Memory (RAM)</h3>
+          <p>A grid of 256 numbered boxes (0 to 255). Each box holds one number between 0 and 255. Both your program commands and your saved data live in these boxes.</p>
+          <a href="https://en.wikipedia.org/wiki/Random-access_memory" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-assembly">
+          <h3>Assembly Language</h3>
+          <p>Short text words like <code>MOVI</code>, <code>ADD</code>, and <code>OUT</code> that represent CPU commands. When you click "Load into Memory", the assembler translates these words into numbers for the CPU.</p>
+          <a href="https://en.wikipedia.org/wiki/Assembly_language" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+
+        <div class="info-card" id="wiki-out">
+          <h3>Screen Output (OUT)</h3>
+          <p>When your program runs <code>OUT R0</code>, the CPU sends the number currently inside slot <code>R0</code> to the output box so you can see the answer.</p>
+          <a href="https://en.wikipedia.org/wiki/Input/output" target="_blank" rel="noopener">Read on Wikipedia →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       VIEW 3: HOW IT IS MADE
+       ========================================================= -->
+  <section class="view" id="view-how">
+    <div class="content-page">
+      <div class="info-card">
+        <h2>How This Simulator Works</h2>
+        <p>
+          This simulator models a classic <a href="https://en.wikipedia.org/wiki/Von_Neumann_architecture" target="_blank" rel="noopener">Von Neumann computer</a> written in Python and running directly in your browser using WebAssembly.
+        </p>
+      </div>
+
+      <div class="info-card">
+        <h3>1. Every Command Uses Two Memory Boxes (2 Bytes)</h3>
+        <p>
+          To keep the CPU simple to follow, every line of assembly code is translated into exactly <strong>2 numbers (2 bytes)</strong> in memory:
+        </p>
+        <p>
+          • <strong>First Box:</strong> Tells the CPU which command to run (for example, <code>2</code> means <code>MOVI</code>, <code>6</code> means <code>ADD</code>) and which register to use.<br>
+          • <strong>Second Box:</strong> Holds the number or memory address you typed (from <code>0</code> to <code>255</code>).
+        </p>
+        <p>
+          Because every command takes 2 boxes, the <strong>Program Counter (PC)</strong> always steps forward by 2 (`0`, `2`, `4`, `6`...).
+        </p>
+      </div>
+
+      <div class="info-card">
+        <h3>2. Supported Commands</h3>
+        <table class="simple-table">
+          <thead>
+            <tr>
+              <th>Command</th>
+              <th>Example</th>
+              <th>What It Does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><code>MOVI</code></td><td><code>MOVI R0, 14</code></td><td>Puts the number 14 into register R0</td></tr>
+            <tr><td><code>MOV</code></td><td><code>MOV R1, R0</code></td><td>Copies the number in R0 into R1</td></tr>
+            <tr><td><code>LOAD</code></td><td><code>LOAD R0, [40]</code></td><td>Copies the number from Memory Box 40 into R0</td></tr>
+            <tr><td><code>STORE</code></td><td><code>STORE R0, [40]</code></td><td>Saves the number in R0 into Memory Box 40</td></tr>
+            <tr><td><code>ADD</code></td><td><code>ADD R0, R1</code></td><td>Adds R0 + R1 and keeps the total in R0</td></tr>
+            <tr><td><code>SUB</code></td><td><code>SUB R0, R1</code></td><td>Subtracts R0 - R1 and keeps the result in R0</td></tr>
+            <tr><td><code>INC / DEC</code></td><td><code>DEC R0</code></td><td>Adds 1 (<code>INC</code>) or subtracts 1 (<code>DEC</code>) from R0</td></tr>
+            <tr><td><code>CMPI</code></td><td><code>CMPI R0, 0</code></td><td>Compares R0 to 0 and sets the Zero flag (<code>Z</code>)</td></tr>
+            <tr><td><code>JMP</code></td><td><code>JMP LOOP</code></td><td>Jumps the Program Counter (PC) to the line named <code>LOOP:</code></td></tr>
+            <tr><td><code>JZ / JNZ</code></td><td><code>JNZ LOOP</code></td><td>Jumps to <code>LOOP:</code> if the Zero flag is 1 (<code>JZ</code>) or 0 (<code>JNZ</code>)</td></tr>
+            <tr><td><code>CALL / RET</code></td><td><code>CALL FUNC</code></td><td>Jumps to a reusable function and returns when done</td></tr>
+            <tr><td><code>OUT</code></td><td><code>OUT R0</code></td><td>Prints the number inside R0 to the Screen Output box</td></tr>
+            <tr><td><code>HLT</code></td><td><code>HLT</code></td><td>Stops the CPU</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       VIEW 4: RESOURCES
+       ========================================================= -->
+  <section class="view" id="view-resources">
+    <div class="content-page">
+      <div class="info-card">
+        <h2>Resources &amp; Concepts</h2>
+        <p>The hardware architecture and code execution model in this simulator are based on these foundational resources:</p>
+      </div>
+
+      <div class="wiki-list">
+        <div class="info-card">
+          <h3>Ben Eater's 8-Bit Breadboard Computer (SAP-1)</h3>
+          <p>The register layout (PC, IR, MAR, R0–R3, ALU, and Flags) and step-by-step Fetch/Decode/Execute model are inspired by Ben Eater's Simple-As-Possible (SAP-1) 8-bit computer design.</p>
+          <a href="https://eater.net/8bit" target="_blank" rel="noopener">https://eater.net/8bit →</a>
+        </div>
+
+        <div class="info-card">
+          <h3>Nand2Tetris (The Elements of Computing Systems)</h3>
+          <p>Course and book by Noam Nisan and Shimon Schocken explaining how a minimal assembler translates human mnemonics and labels into binary machine instructions.</p>
+          <a href="https://www.nand2tetris.org/" target="_blank" rel="noopener">https://www.nand2tetris.org/ →</a>
+        </div>
+
+        <div class="info-card">
+          <h3>Marco Schweitzer's 8-Bit Assembler Simulator</h3>
+          <p>Inspired the side-by-side workflow of assembling instructions directly into a visible 256-byte RAM grid.</p>
+          <a href="https://schweigi.github.io/assembler-simulator/" target="_blank" rel="noopener">https://schweigi.github.io/assembler-simulator/ →</a>
+        </div>
+
+        <div class="info-card">
+          <h3>Pyodide (CPython on WebAssembly)</h3>
+          <p>Runs the Python CPU simulator and two-pass assembler directly inside the browser without needing a backend server.</p>
+          <a href="https://pyodide.org/" target="_blank" rel="noopener">https://pyodide.org/ →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- =========================================================
+       JAVASCRIPT & EMBEDDED PYTHON ENGINE
+       ========================================================= -->
+  <script>
+    const TOOLTIPS = {
+      "wiki-assembly": ["Program Instructions", "Commands written in simple words like MOVI or ADD. Clicking 'Load into Memory' turns them into numbers inside RAM."],
+      "wiki-cpu": ["Central Processing Unit", "The chip that reads instructions from memory and runs them one by one."],
+      "wiki-cycle": ["Current Step", "Every instruction happens in 3 small steps: Fetch, Decode, and Execute."],
+      "wiki-fetch": ["1. Fetch", "Copies the next 2-byte command from Memory (RAM) into the CPU."],
+      "wiki-decode": ["2. Decode", "Figures out what action the command number asks for."],
+      "wiki-execute": ["3. Execute", "Does the actual math, data move, or jump."],
+      "wiki-registers": ["Registers (R0 – R3)", "Four small number slots inside the CPU (each holds a number from 0 to 255)."],
+      "wiki-pc": ["PC (Program Counter)", "Bookmark showing which Memory Box holds the next instruction to Fetch."],
+      "wiki-ir": ["IR (Instruction Register)", "Holds the 2-byte command currently being decoded and executed."],
+      "wiki-mar": ["MAR (Memory Address)", "Shows which Memory Box number the CPU is currently reading or writing."],
+      "wiki-sp": ["SP (Stack Pointer)", "Points to the temporary scratchpad at the end of memory (box 255)."],
+      "wiki-alu": ["ALU (Math Unit)", "The calculator inside the CPU that adds, subtracts, and compares numbers."],
+      "wiki-flags": ["Flags (Z & C)", "Z turns to 1 when a math result is Zero. C turns to 1 when a math result goes over 255."],
+      "wiki-ram": ["Memory (RAM)", "256 numbered boxes (0 to 255) that store both your program and your data."],
+      "wiki-out": ["Screen Output", "Shows numbers printed by your program using the OUT command."]
+    };
+
+    const EXAMPLES = {
+      add: `; Add 14 + 28 and print 42
+MOVI R0, 14     ; Put 14 into slot R0
+MOVI R1, 28     ; Put 28 into slot R1
+ADD  R0, R1     ; Add R0 + R1 (42) into R0
+OUT  R0         ; Print R0 to the screen
+HLT             ; Stop the CPU`,
+
+      count: `; Count down from 5 to 0
+MOVI R0, 5      ; Start R0 at 5
+
+LOOP:
+  OUT  R0       ; Print R0
+  DEC  R0       ; Subtract 1 from R0
+  JNZ  LOOP     ; If R0 is not 0, jump back to LOOP
+
+OUT  R0         ; Print final 0
+HLT`,
+
+      fib: `; Print Fibonacci numbers (0, 1, 1, 2, 3, 5, 8, 13...)
+MOVI R0, 0
+MOVI R1, 1
+MOVI R3, 7      ; Repeat 7 times
+
+OUT R0
+OUT R1
+
+LOOP:
+  MOV R2, R0
+  ADD R2, R1    ; R2 = R0 + R1
+  OUT R2
+  MOV R0, R1
+  MOV R1, R2
+  DEC R3
+  JNZ LOOP
+
+HLT`,
+
+      memory: `; Save two numbers into Memory Boxes 40 and 41, then add them
+MOVI  R0, 25
+STORE R0, [40]  ; Save 25 into Memory Box 40
+
+MOVI  R0, 75
+STORE R0, [41]  ; Save 75 into Memory Box 41
+
+LOAD  R1, [40]  ; Read Box 40 into R1
+LOAD  R2, [41]  ; Read Box 41 into R2
+ADD   R1, R2    ; R1 = 25 + 75 = 100
+STORE R1, [42]  ; Save 100 into Memory Box 42
+OUT   R1        ; Print 100
+HLT`
+    };
+
+    let pyodide = null;
+    let timer = null;
+    let lastState = null;
+    let showAllRam = false;
+
+    function openTab(tabName, wikiId = null) {
+      document.querySelectorAll(".tab-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.tab === tabName);
+      });
+      document.querySelectorAll(".view").forEach(v => {
+        v.classList.toggle("active", v.id === `view-${tabName}`);
+      });
+
+      if (wikiId) {
+        const target = document.getElementById(wikiId);
+        if (target) {
+          document.querySelectorAll(".info-card").forEach(c => c.classList.remove("highlight-target"));
+          target.classList.add("highlight-target");
+          setTimeout(() => target.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+        }
+      }
+    }
+
+    document.querySelectorAll(".tab-btn").forEach(b => {
+      b.addEventListener("click", () => openTab(b.dataset.tab));
+    });
+
+    // Tooltip hover & click
+    const tooltip = document.getElementById("tooltip");
+    document.addEventListener("mouseover", e => {
+      const btn = e.target.closest(".info-btn");
+      if (!btn) return;
+      const item = TOOLTIPS[btn.dataset.wiki];
+      if (!item) return;
+      tooltip.innerHTML = `<strong>${item[0]}</strong>${item[1]}<small>Click to read more in Wiki →</small>`;
+      tooltip.style.display = "block";
+      const r = btn.getBoundingClientRect();
+      tooltip.style.left = `${Math.min(window.innerWidth - 295, Math.max(10, r.left - 100))}px`;
+      tooltip.style.top = `${r.bottom + 8}px`;
+    });
+
+    document.addEventListener("mouseout", e => {
+      if (e.target.closest(".info-btn")) tooltip.style.display = "none";
+    });
+
+    document.addEventListener("click", e => {
+      const btn = e.target.closest(".info-btn");
+      if (!btn) return;
+      e.stopPropagation();
+      tooltip.style.display = "none";
+      openTab("wiki", btn.dataset.wiki);
+    });
+
+    // Render UI from Python state
+    function updateUI(st) {
+      document.getElementById("statusText").textContent = st.explanation;
+      document.getElementById("currentInstruction").textContent = `Command: ${st.decoded_text}`;
+      document.getElementById("stepCounter").textContent = `Instructions Run: ${st.cycles}`;
+
+      document.getElementById("stFetch").classList.toggle("active", st.last_stage === "FETCH");
+      document.getElementById("stDecode").classList.toggle("active", st.last_stage === "DECODE");
+      document.getElementById("stExecute").classList.toggle("active", st.last_stage === "EXECUTE");
+
+      // General Registers
+      const gprContainer = document.getElementById("gprContainer");
+      gprContainer.innerHTML = "";
+      for (let i = 0; i < 4; i++) {
+        const val = st.reg[i];
+        const changed = lastState && lastState.reg[i] !== val;
+        gprContainer.innerHTML += `
+          <div class="reg-item ${changed ? "changed" : ""}">
+            <span class="reg-name">Slot R${i}</span>
+            <span class="reg-value">${val}</span>
+          </div>
+        `;
+      }
+
+      // Pointers
+      document.getElementById("valPC").textContent = `Box ${st.pc}`;
+      document.getElementById("valIR").textContent = "0x" + st.ir.toString(16).toUpperCase().padStart(4, "0");
+      document.getElementById("valMAR").textContent = `Box ${st.mar}`;
+      document.getElementById("valSP").textContent = `Box ${st.sp}`;
+
+      // ALU & Flags
+      document.getElementById("valALU").textContent = st.alu_op;
+      const fz = document.getElementById("flgZ");
+      const fc = document.getElementById("flgC");
+      fz.textContent = `Z:${st.z}`;
+      fc.textContent = `C:${st.c}`;
+      fz.classList.toggle("on", st.z === 1);
+      fc.classList.toggle("on", st.c === 1);
+
+      // Output
+      document.getElementById("outputScreen").textContent =
+        st.output.length ? st.output.join("   |   ") : "None yet";
+
+      // RAM Grid (64 boxes by default for readability, or all 256)
+      const count = showAllRam ? 256 : 64;
+      const ramGrid = document.getElementById("ramGrid");
+      let html = "";
+      for (let a = 0; a < count; a++) {
+        const v = st.ram[a];
+        const cls = [
+          "ram-cell",
+          v !== 0 ? "nonzero" : "",
+          (a === st.pc || a === st.pc + 1) ? "is-pc" : "",
+          a === st.sp ? "is-sp" : ""
+        ].join(" ");
+        html += `<div class="${cls}"><span class="addr">#${a}</span>${v}</div>`;
+      }
+      ramGrid.innerHTML = html;
+
+      if (st.halted && timer) stopAutoRun();
+      lastState = st;
+    }
+
+    function runPy(code) {
+      const p = pyodide.runPython(code);
+      const obj = p.toJs({ dict_converter: Object.fromEntries });
+      p.destroy();
+      return obj;
+    }
+
+    function loadProgram() {
+      stopAutoRun();
+      const errEl = document.getElementById("errorText");
+      errEl.style.display = "none";
+      try {
+        pyodide.globals.set("src", document.getElementById("codeEditor").value);
+        pyodide.runPython("cpu.assemble(src)");
+        lastState = null;
+        updateUI(runPy("cpu.get_state()"));
+      } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = "block";
+      }
+    }
+
+    function stopAutoRun() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+        document.getElementById("runBtn").textContent = "Auto-Run";
+      }
+    }
+
+    async function init() {
+      document.getElementById("codeEditor").value = EXAMPLES.add;
+      pyodide = await loadPyodide();
+
+      let pyCode = "";
+      try {
+        const res = await fetch("cpu_core.py");
+        pyCode = res.ok ? await res.text() : document.getElementById("embedded-py").textContent;
+      } catch (_) {
+        pyCode = document.getElementById("embedded-py").textContent;
+      }
+
+      await pyodide.runPythonAsync(pyCode);
+      document.getElementById("engineStatus").textContent = "Python Ready";
+
+      ["loadBtn", "microBtn", "stepBtn", "runBtn", "resetBtn"].forEach(id => {
+        document.getElementById(id).disabled = false;
+      });
+
+      loadProgram();
+    }
+
+    document.getElementById("exampleSelect").addEventListener("change", e => {
+      document.getElementById("codeEditor").value = EXAMPLES[e.target.value];
+      loadProgram();
+    });
+
+    document.getElementById("loadBtn").addEventListener("click", loadProgram);
+    document.getElementById("microBtn").addEventListener("click", () => {
+      stopAutoRun();
+      updateUI(runPy("cpu.step_stage()"));
+    });
+    document.getElementById("stepBtn").addEventListener("click", () => {
+      stopAutoRun();
+      updateUI(runPy("cpu.step_instruction()"));
+    });
+    document.getElementById("runBtn").addEventListener("click", () => {
+      if (timer) {
+        stopAutoRun();
+        return;
+      }
+      document.getElementById("runBtn").textContent = "Pause";
+      timer = setInterval(() => updateUI(runPy("cpu.step_stage()")), 350);
+    });
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      stopAutoRun();
+      lastState = null;
+      updateUI(runPy("cpu.reset() or cpu.get_state()"));
+    });
+    document.getElementById("toggleRamBtn").addEventListener("click", e => {
+      showAllRam = !showAllRam;
+      e.target.textContent = showAllRam ? "Show First 64 Boxes" : "Show All 256 Boxes";
+      if (lastState) updateUI(lastState);
+    });
+
+    init();
+  </script>
+
+  <script id="embedded-py" type="text/python">
+class CPU8Bit:
+    OPCODES = {
+        "NOP": 0x00, "HLT": 0x01, "MOVI": 0x02, "MOV": 0x03,
+        "LOAD": 0x04, "STORE": 0x05, "ADD": 0x06, "ADDI": 0x07,
+        "SUB": 0x08, "INC": 0x09, "DEC": 0x0A, "AND": 0x0B,
+        "OR": 0x0C, "XOR": 0x0D, "CMP": 0x0E, "CMPI": 0x0F,
+        "JMP": 0x10, "JZ": 0x11, "JNZ": 0x12, "JC": 0x13,
+        "PUSH": 0x14, "POP": 0x15, "CALL": 0x16, "RET": 0x17,
+        "OUT": 0x18,
+    }
+    REV_OPCODES = {v: k for k, v in OPCODES.items()}
+
+    def __init__(self):
+        self.ram = [0] * 256
+        self.program_backup = [0] * 256
+        self.reset()
+
+    def reset(self):
+        self.ram = list(self.program_backup)
+        self.reg = [0, 0, 0, 0]
+        self.pc = 0
+        self.sp = 255
+        self.ir = 0
+        self.mar = 0
+        self.mdr = 0
+        self.z = 0
+        self.c = 0
+        self.n = 0
+        self.halted = False
+        self.stage = "FETCH"
+        self.last_stage_run = "IDLE"
+        self.cycles = 0
+        self.alu_op = "Idle"
+        self.decoded_text = "None"
+        self.decoded_info = {}
+        self.explanation = "Ready. Click 'Small Step' or 'Full Instruction' to begin."
+        self.output = []
+
+    def _update_flags(self, raw):
+        self.c = 1 if (raw > 255 or raw < 0) else 0
+        val = raw & 0xFF
+        self.z = 1 if val == 0 else 0
+        self.n = 1 if (val & 0x80) != 0 else 0
+        return val
+
+    def assemble(self, source_code):
+        lines = source_code.splitlines()
+        labels, parsed, addr = {}, [], 0
+        for line_num, raw_line in enumerate(lines, 1):
+            line = raw_line.split(";")[0].strip()
+            if not line:
+                continue
+            if line.endswith(":"):
+                labels[line[:-1].strip().upper()] = addr
+                continue
+            if ":" in line:
+                lbl, rest = line.split(":", 1)
+                labels[lbl.strip().upper()] = addr
+                line = rest.strip()
+                if not line:
+                    continue
+            parts = [p.strip() for p in line.replace(",", " ").split() if p.strip()]
+            mnem = parts[0].upper()
+            if mnem not in self.OPCODES:
+                raise ValueError(f"Line {line_num}: Unknown command '{mnem}'")
+            parsed.append((line_num, mnem, parts[1:], addr))
+            addr += 2
+
+        mem = [0] * 256
+        def parse_reg(tok, ln):
+            t = tok.upper()
+            if t in ("R0", "R1", "R2", "R3"):
+                return int(t[1])
+            raise ValueError(f"Line {ln}: Expected register R0..R3, got '{tok}'")
+
+        def parse_val(tok, ln):
+            t = tok.strip("[]").upper()
+            if t in labels:
+                return labels[t] & 0xFF
+            return int(t, 0) & 0xFF
+
+        for ln, mnem, args, cur_addr in parsed:
+            opcode = self.OPCODES[mnem]
+            operand = 0
+            if mnem in ("INC", "DEC", "PUSH", "POP", "OUT"):
+                operand = (parse_reg(args[0], ln) << 6) & 0xFF
+            elif mnem in ("MOV", "ADD", "SUB", "AND", "OR", "XOR", "CMP"):
+                operand = ((parse_reg(args[0], ln) << 6) | (parse_reg(args[1], ln) << 4)) & 0xFF
+            elif mnem in ("MOVI", "ADDI", "CMPI", "LOAD", "STORE"):
+                opcode |= (parse_reg(args[0], ln) << 6)
+                operand = parse_val(args[1], ln)
+            elif mnem in ("JMP", "JZ", "JNZ", "JC", "CALL"):
+                operand = parse_val(args[0], ln)
+            mem[cur_addr] = opcode & 0xFF
+            mem[cur_addr + 1] = operand & 0xFF
+
+        self.program_backup = list(mem)
+        self.reset()
+        return True
+
+    def step_stage(self):
+        if self.halted:
+            self.explanation = "CPU is stopped. Click 'Reset' to run again."
+            return self.get_state()
+
+        if self.stage == "FETCH":
+            self.last_stage_run = "FETCH"
+            self.mar = self.pc
+            op_byte = self.ram[self.mar]
+            arg_byte = self.ram[(self.mar + 1) & 0xFF]
+            self.ir = (op_byte << 8) | arg_byte
+            old_pc = self.pc
+            self.pc = (self.pc + 2) & 0xFF
+            self.alu_op = "Idle"
+            self.explanation = f"Fetch: Read command from Memory Box #{old_pc} and #{old_pc+1}, and moved PC bookmark to Box #{self.pc}."
+            self.stage = "DECODE"
+
+        elif self.stage == "DECODE":
+            self.last_stage_run = "DECODE"
+            op_byte = (self.ir >> 8) & 0xFF
+            arg_byte = self.ir & 0xFF
+            base_op = op_byte & 0x3F
+            rx_hi = (op_byte >> 6) & 0x03
+            rx_op = (arg_byte >> 6) & 0x03
+            ry_op = (arg_byte >> 4) & 0x03
+            mnem = self.REV_OPCODES.get(base_op, "NOP")
+            self.decoded_info = {"mnem": mnem, "rx_hi": rx_hi, "rx": rx_op, "ry": ry_op, "imm": arg_byte}
+
+            if mnem in ("MOVI", "ADDI", "CMPI"): self.decoded_text = f"{mnem} R{rx_hi}, {arg_byte}"
+            elif mnem in ("LOAD", "STORE"): self.decoded_text = f"{mnem} R{rx_hi}, [{arg_byte}]"
+            elif mnem in ("MOV", "ADD", "SUB", "AND", "OR", "XOR", "CMP"): self.decoded_text = f"{mnem} R{rx_op}, R{ry_op}"
+            elif mnem in ("INC", "DEC", "PUSH", "POP", "OUT"): self.decoded_text = f"{mnem} R{rx_op}"
+            elif mnem in ("JMP", "JZ", "JNZ", "JC", "CALL"): self.decoded_text = f"{mnem} Box #{arg_byte}"
+            else: self.decoded_text = mnem
+
+            self.explanation = f"Decode: Translated the memory numbers into the command '{self.decoded_text}'."
+            self.stage = "EXECUTE"
+
+        elif self.stage == "EXECUTE":
+            self.last_stage_run = "EXECUTE"
+            d = self.decoded_info
+            mnem, rx_hi, rx, ry, imm = d["mnem"], d["rx_hi"], d["rx"], d["ry"], d["imm"]
+            self.cycles += 1
+
+            if mnem == "HLT":
+                self.halted = True
+                self.explanation = "Execute: HLT reached. The program is finished."
+            elif mnem == "MOVI":
+                self.reg[rx_hi] = imm
+                self.explanation = f"Execute: Put the number {imm} into Slot R{rx_hi}."
+            elif mnem == "MOV":
+                self.reg[rx] = self.reg[ry]
+                self.explanation = f"Execute: Copied {self.reg[ry]} from Slot R{ry} into Slot R{rx}."
+            elif mnem == "LOAD":
+                self.mar = imm
+                self.reg[rx_hi] = self.ram[imm]
+                self.explanation = f"Execute: Read {self.ram[imm]} from Memory Box #{imm} into Slot R{rx_hi}."
+            elif mnem == "STORE":
+                self.mar = imm
+                self.ram[imm] = self.reg[rx_hi]
+                self.explanation = f"Execute: Saved {self.reg[rx_hi]} from Slot R{rx_hi} into Memory Box #{imm}."
+            elif mnem == "ADD":
+                a, b = self.reg[rx], self.reg[ry]
+                res = self._update_flags(a + b)
+                self.reg[rx] = res
+                self.alu_op = f"{a} + {b} = {res}"
+                self.explanation = f"Execute: Added R{rx} ({a}) + R{ry} ({b}) = {res}, and saved {res} in R{rx}."
+            elif mnem == "SUB":
+                a, b = self.reg[rx], self.reg[ry]
+                res = self._update_flags(a - b)
+                self.reg[rx] = res
+                self.alu_op = f"{a} - {b} = {res}"
+                self.explanation = f"Execute: Subtracted R{rx} ({a}) - R{ry} ({b}) = {res}."
+            elif mnem == "INC":
+                a = self.reg[rx]
+                res = self._update_flags(a + 1)
+                self.reg[rx] = res
+                self.alu_op = f"{a} + 1 = {res}"
+                self.explanation = f"Execute: Added 1 to Slot R{rx} ({a} → {res})."
+            elif mnem == "DEC":
+                a = self.reg[rx]
+                res = self._update_flags(a - 1)
+                self.reg[rx] = res
+                self.alu_op = f"{a} - 1 = {res}"
+                self.explanation = f"Execute: Subtracted 1 from Slot R{rx} ({a} → {res}). Zero Flag Z is now {self.z}."
+            elif mnem == "CMPI":
+                a = self.reg[rx_hi]
+                self._update_flags(a - imm)
+                self.alu_op = f"Compare {a} & {imm}"
+                self.explanation = f"Execute: Compared R{rx_hi} ({a}) with {imm}. Zero Flag Z is {self.z}."
+            elif mnem == "JMP":
+                self.pc = imm
+                self.explanation = f"Execute: Jumped PC bookmark to Memory Box #{imm}."
+            elif mnem == "JZ":
+                if self.z == 1:
+                    self.pc = imm
+                    self.explanation = f"Execute: Zero Flag is 1, so jumped PC to Memory Box #{imm}."
+                else:
+                    self.explanation = "Execute: Zero Flag is 0, so did not jump."
+            elif mnem == "JNZ":
+                if self.z == 0:
+                    self.pc = imm
+                    self.explanation = f"Execute: Result was not zero (Z=0), so jumped PC back to Memory Box #{imm}."
+                else:
+                    self.explanation = "Execute: Result reached zero (Z=1), so loop ended and moved on."
+            elif mnem == "CALL":
+                self.ram[self.sp] = self.pc
+                self.sp = (self.sp - 1) & 0xFF
+                self.pc = imm
+                self.explanation = f"Execute: Saved return box on stack and jumped to Box #{imm}."
+            elif mnem == "RET":
+                self.sp = (self.sp + 1) & 0xFF
+                self.pc = self.ram[self.sp]
+                self.explanation = f"Execute: Returned from function back to Box #{self.pc}."
+            elif mnem == "OUT":
+                val = self.reg[rx]
+                self.output.append(str(val))
+                self.explanation = f"Execute: Printed R{rx}'s value ({val}) to the Screen Output."
+
+            self.stage = "FETCH"
+        return self.get_state()
+
+    def step_instruction(self):
+        while not self.halted:
+            s = self.step_stage()
+            if self.last_stage_run == "EXECUTE":
+                return s
+        return self.get_state()
+
+    def get_state(self):
+        return {
+            "reg": list(self.reg), "pc": self.pc, "sp": self.sp, "ir": self.ir,
+            "mar": self.mar, "z": self.z, "c": self.c, "halted": self.halted,
+            "stage": self.stage, "last_stage": self.last_stage_run,
+            "cycles": self.cycles, "alu_op": self.alu_op,
+            "decoded_text": self.decoded_text, "explanation": self.explanation,
+            "output": list(self.output), "ram": list(self.ram)
+        }
+
+cpu = CPU8Bit()
+  </script>
+</body>
+</html>
